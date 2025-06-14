@@ -1,7 +1,7 @@
 {
   "name": "@rythmfm/openapi-backend",
   "description": "Build, Validate, Route, Authenticate and Mock using OpenAPI definitions. Framework-agnostic",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "author": "Viljami Kuosmanen <viljami@viljami.io>",
   "funding": "https://github.com/sponsors/anttiviljami",
   "license": "MIT",

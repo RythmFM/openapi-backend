@@ -1,0 +1,96 @@
+name: Release Package to GitHub Packages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest-l
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build package
+        run: bun run build
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          # Ensure we are on the correct branch for versioning and push
+          git checkout main
+          # Pull latest changes to avoid conflicts if any (less likely for simple push trigger)
+          git pull origin main --ff-only
+
+      - name: Increment version, commit, and push
+        run: |
+          # Increment patch version in package.json
+          # The -m flag sets the commit message for the version bump if npm were to create a tag/commit itself.
+          # --no-git-tag-version prevents npm from creating a tag.
+          npm version patch --no-git-tag-version -m "chore(release): Bump version to %s [skip ci]"
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "New version: $NEW_VERSION"
+          
+          # Commit package.json and bun.lockb
+          git add package.json bun.lockb
+          # Check if there are changes to commit (npm version patch should always change package.json)
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(release): Bump version to $NEW_VERSION [skip ci]"
+            git push origin main
+          else
+            echo "No changes to commit for version bump. This is unexpected after 'npm version patch'."
+            # Optionally, fail the workflow if this happens, as it's an anomaly
+            # exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify package scope
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          if [[ ! "$PACKAGE_NAME" == "@"* ]]; then
+            echo "Error: Package name '$PACKAGE_NAME' in package.json is not scoped."
+            echo "It must be in the format '@owner/repository_name' or '@owner/package_name' to publish to GitHub Packages."
+            echo "Please update your package.json."
+            exit 1
+          fi
+          echo "Package name '$PACKAGE_NAME' is correctly scoped."
+
+      - name: Set up Node.js for GitHub Packages publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Publish to GitHub Packages
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get package version
+        id: package_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.package_version.outputs.version }}
+          name: Release v${{ steps.package_version.outputs.version }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
