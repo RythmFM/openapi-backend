@@ -7,7 +7,7 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest-l
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
